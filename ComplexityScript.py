@@ -5,7 +5,7 @@ import math
 def get_pythagoras(x, y):
     return math.sqrt(x ** 2 + y ** 2)
 
-with open("Your File Path") as json_data:
+with open("YourFilePath") as json_data:
     # add your path above 
     data = json.load(json_data)
 full_dataset = pd.DataFrame(data['_notes'])
@@ -24,12 +24,20 @@ right['_yMovement'] = right.loc[:, ['_yCenter']].diff().fillna(0)
 right['_totMovement'] = right.apply(lambda x: get_pythagoras(x['_xMovement'], x['_yMovement']), axis=1).fillna(0)
 right['_angleChange'] = right.apply(lambda x: math.atan(x['_yMovement']/x['_xMovement']), axis=1)
 
-
 average_angle = (left['_angleChange'].mean() + right['_angleChange'].mean()) / 2
-time = (full_dataset['_time'].max() - full_dataset['_time'].min())
-total_distance= (left['_totMovement'].sum() + right['_totMovement'].sum()) / 2
-average_speed = total_distance/time
+time = (full_dataset['_time'].max() - full_dataset['_time'].min()) * bpm / 60
+bpm = #insert bpm of track
 
+total_distance = 0
+count = 2
+number_blocks = full_dataset.count()
+while (count < number_blocks):
+    if full_dataset['_totMovement'] > .5:
+        total_distance = total_distance + (left['_totMovement'] + right['_totMovement']) / 2
+
+
+
+average_speed = total_distance/time
 
 complexity_speed= average_speed*15
 complexity_angle= average_angle
