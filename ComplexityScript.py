@@ -5,7 +5,7 @@ import math
 def get_pythagoras(x, y):
     return math.sqrt(x ** 2 + y ** 2)
 
-with open("Your Diff File Name") as json_data:
+with open("Your Diff File Path") as json_data:
     # add your path above 
     data = json.load(json_data)
 full_dataset = pd.DataFrame(data['_notes'])
