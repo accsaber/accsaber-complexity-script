@@ -4,10 +4,11 @@ import math
 
 def get_pythagoras(x, y):
     return math.sqrt(x ** 2 + y ** 2)
-path = input("What is the map file path?")
-with open(path) as json_data:
-    data = json.load(json_data)
-df = pd.DataFrame(data['_notes'])
+diffPath = input("What is the diff file name?")
+infoPath = "Info.dat"
+with open(diffPath) as diff_json_data:
+    diffData = json.load(diff_json_data)
+df = pd.DataFrame(diffData['_notes'])
 df['_yCenter'] = df.loc[:, ('_lineLayer')].apply(lambda x: 1 + x * 0.55)
 df['_xCenter'] = df.loc[:, ('_lineIndex')].apply(lambda x: -0.9 + x * 0.6)
 left = (df[df['_type'] == 0]) #All left handed notes
