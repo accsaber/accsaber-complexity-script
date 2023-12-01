@@ -4,8 +4,8 @@ import math
 
 def get_pythagoras(x, y):
     return math.sqrt(x ** 2 + y ** 2)
-diffPath = input("What is the diff file name?")
-infoPath = "Info.dat"
+diffPath = "accsaber-maps/1a2f6 (Digital World - SlimyBlob)/HardStandard.dat" #Replace with your diffFilePath
+infoPath = "accsaber-maps/1a2f6 (Digital World - SlimyBlob)/Info.dat" #Replace with your infoPath
 with open(diffPath) as diff_json_data:
     diffData = json.load(diff_json_data)
 df = pd.DataFrame(diffData['_notes'])
