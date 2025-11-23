@@ -2,17 +2,61 @@
 This file creates a Map class to store information about a map
 """
 from utils import normalize_string
+from ParseObjects import BuildObjectsDataFramev2, BuildObjectsDataFramev3
 import json
+import os
+import pandas as pd
+import MapStatistics
 
-def get_diff_info_dict(info_data, diff, lawless):
+def DetectMetadataVersion(diff_data):
+    """
+    Detects the metadata version the beatmap uses
+    """
+    notes = diff_data.get('_notes')
+    if notes is not None:
+        return "v2"
+    else:
+        notes = diff_data.get('colorNotes')
+        if notes is not None:
+            return "v3"
+    return "Error: not a v2 or v3 map"
+
+
+def GetBpmChanges(mapset_path, diff_info):
+    """
+    Returns a DataFrame of BPM Changes or an empty DataFrame if there are no BPM changes
+    """
+    bpmPath = os.path.join(mapset_path, "BPMInfo.dat")
+    if os.path.exists(bpmPath):
+        with open(bpmPath, encoding="utf-8") as bpm_json_data:
+            bpmData = json.load(bpm_json_data)
+        song_frequency = bpmData.get('_songFrequency', 44100)
+        bpmChangesDict = bpmData.get('_regions', [])
+        df_BPMChanges = pd.DataFrame(bpmChangesDict)
+        if not df_BPMChanges.empty:
+            df_BPMChanges['_change_in_time'] = (df_BPMChanges['_endSampleIndex'] - df_BPMChanges['_startSampleIndex']) / song_frequency
+            df_BPMChanges['_BPM'] = (df_BPMChanges['_endBeat'] - df_BPMChanges['_startBeat']) * (60 / df_BPMChanges['_change_in_time'])
+            df_BPMChanges['_time'] = df_BPMChanges['_change_in_time'].cumsum()
+        df_BPMChanges["source"] = "BPMInfo"
+        return df_BPMChanges
+    customData = diff_info.get('_customData', {})
+    if "_BPMChanges" in customData:
+        df_BPMChanges = pd.DataFrame(customData['_BPMChanges'])
+        df_BPMChanges["source"] = "V2_custom"
+        return df_BPMChanges
+    if "bpmEvents" in diff_info:
+        df_BPMChanges = pd.DataFrame(diff_info["bpmEvents"])
+        df_BPMChanges["source"] = "V3_official"
+        return df_BPMChanges
+    return pd.DataFrame([])
+       
+def get_diff_info_dict(info_data, diff):
     """
     Returns a dictionary of the information contained in the info.dat file that is relevant for this difficulty
     """
     # we first want to iterate through dicts
     for beatmap_set in info_data["_difficultyBeatmapSets"]:
-        if ((lawless == 0) & (beatmap_set["_beatmapCharacteristicName"] != "Standard")):
-            continue
-        elif ((lawless == 1) & (beatmap_set["_beatmapCharacteristicName"] != "Lawless")):
+        if (beatmap_set["_beatmapCharacteristicName"] != "Standard"):
             continue
         else:
             for difficulty in beatmap_set["_difficultyBeatmaps"]:
@@ -20,8 +64,6 @@ def get_diff_info_dict(info_data, diff, lawless):
                     return difficulty
     print("Error finding difficulty metadata in the info.dat file for this difficulty")
     return
-
-
 
 def diff_str_to_int(diff_str):
     """
@@ -42,46 +84,54 @@ def diff_str_to_int(diff_str):
         return 9
     return -1
 
-def get_diff_path(mapset_path, diff):
-    """
-    Returns the string for the file path to the difficulty's .dat file
-    """
-    if (diff == 1):
-        return mapset_path + "/EasyStandard.dat"
-    elif (diff == 3):
-        return mapset_path + "/NormalStandard.dat"
-    elif (diff == 5):
-        return mapset_path + "/HardStandard.dat"
-    elif (diff == 7):
-        return mapset_path + "/ExpertStandard.dat"
-    return mapset_path + "/ExpertPlusStandard.dat"
-
 class Map:
     """
     Map class declaration
-    """
-    def __init__(self, mapset_path, diff_str, category, lawless):
-        """
-        Constructor
-        Fields:
+    Fields:
         - mapset_path (string): file path of the mapset directory
         - diff (int): integer encoding difficulty label
-        - lawless (int): 1 if lawless diff, 0 otherwise
         - info_data (dict): dictionary storing the contents from the info .dat file
+        - diff_info (dict): dictionary storing the contents from the info .dat file for the respective diff
         - diff_data (dict): dictionary storing the contents from the respective diff's .dat file
         - category (string): the category of accuracy map
         - njs (int): njs of the map
-        - objects (DataFrame): DataFrame of all objects in the map
+        - initial_bpm (double) : initial bpm of the map
+        - bpm_changes (DataFrame): DataFrame of bpm changes in the map
+        - metadata_version (string): "v2" if the map stores v2 data, "v3" if the map stores v3 data
+        - dataframe_struct (MapDataFrames class): Class that contains a lot of different DataFrames related to the map
+        - statistics (MapStatistics class): Class that contains statistics related to this map
+    """
+    def __init__(self, mapset_path, diff_str, category):
+        """
+        Constructor
         """
         self.mapset_path = mapset_path
         self.diff = diff_str_to_int(diff_str)
-        self.lawless = lawless
         if (self.diff == -1):
-            print("Please provide a valid difficulty label")
-            return
-        with open(mapset_path + "/Info.dat", "r", encoding="utf-8") as f:
+            raise ValueError("Please provide a valid difficulty label")
+        info_path = os.path.join(mapset_path, "Info.dat")
+        if not os.path.exists(info_path):
+            info_path = os.path.join(mapset_path, "info.dat")
+        with open(info_path, "r", encoding="utf-8") as f:
             self.info_data = json.load(f)
-        with open(get_diff_path(mapset_path, self.diff), "r", encoding="utf-8") as f:
-            self.dict_data = json.load(f)
+        self.diff_info = get_diff_info_dict(self.info_data, self.diff)
+        if self.diff_info is None:
+            raise ValueError("Difficulty metadata not found")
+        diff_filename = self.diff_info["_beatmapFilename"]
+        diff_path = os.path.join(mapset_path, diff_filename)
+        with open(diff_path, "r", encoding="utf-8") as f:
+            self.diff_data = json.load(f)
         self.category = normalize_string(category)
         
+        self.njs = self.diff_info["_noteJumpMovementSpeed"]
+        self.initial_bpm = self.info_data.get('_beatsPerMinute')
+        self.bpm_changes = GetBpmChanges(mapset_path, self.diff_data)
+        self.metadata_version = DetectMetadataVersion(self.diff_data)
+        self.dataframe_struct = None
+        if (self.metadata_version != "v2" & self.metadata_version != "v3"):
+            return
+        if (self.metadata_version == "v2"):
+            BuildObjectsDataFramev2(self, self.bpm_changes, self.diff_data, self.initial_bpm)
+        else:
+            BuildObjectsDataFramev3(self, self.mapset_path, self.bpm_changes, self.diff_data, self.initial_bpm)
+        self.statistics = MapStatistics(self)
