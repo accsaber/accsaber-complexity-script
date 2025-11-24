@@ -1,12 +1,12 @@
 """
 This file creates a Map class to store information about a map
 """
-from utils import normalize_string
-from ParseObjects import BuildObjectsDataFramev2, BuildObjectsDataFramev3
+from libs.utils import normalize_string
+from libs.ParseObjects import BuildObjectsDataFramev2, BuildObjectsDataFramev3
 import json
 import os
 import pandas as pd
-import MapStatistics
+from libs.MapStatistics import MapStatistics
 
 def DetectMetadataVersion(diff_data):
     """
@@ -98,6 +98,7 @@ class Map:
         - initial_bpm (double) : initial bpm of the map
         - bpm_changes (DataFrame): DataFrame of bpm changes in the map
         - metadata_version (string): "v2" if the map stores v2 data, "v3" if the map stores v3 data
+        - logs_list (string[]): this stores a list of failed criteria
         - dataframe_struct (MapDataFrames class): Class that contains a lot of different DataFrames related to the map
         - statistics (MapStatistics class): Class that contains statistics related to this map
     """
@@ -127,8 +128,9 @@ class Map:
         self.initial_bpm = self.info_data.get('_beatsPerMinute')
         self.bpm_changes = GetBpmChanges(mapset_path, self.diff_data)
         self.metadata_version = DetectMetadataVersion(self.diff_data)
+        self.logs_list = []
         self.dataframe_struct = None
-        if (self.metadata_version != "v2" & self.metadata_version != "v3"):
+        if (self.metadata_version != "v2" and self.metadata_version != "v3"):
             return
         if (self.metadata_version == "v2"):
             BuildObjectsDataFramev2(self, self.bpm_changes, self.diff_data, self.initial_bpm)

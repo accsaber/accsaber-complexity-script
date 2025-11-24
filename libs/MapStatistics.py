@@ -3,7 +3,7 @@ This file defines a class MapStatistics that stores statistics about a map
 This class will be a field stored within the Map class
 The nested structure is for readability, separating map statistics from metadata-related variables
 """
-from CalculateStats import (
+from libs.CalculateStats import (
     GetLeftSwings,
     GetRightSwings,
     GetTotalSwings,

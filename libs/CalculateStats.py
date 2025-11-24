@@ -13,37 +13,37 @@ def GetTotalSwings(map_object):
     return len(map_object.dataframe_struct.df_new_swing)
 
 def GetLeftTime(map_object):
-    return map_object.dataframe_struct.df_new_left_swing['_timeChangeSeconds'].sum()
+    return round(map_object.dataframe_struct.df_new_left_swing['_timeChangeSeconds'].sum(), 2)
 
 def GetRightTime(map_object):
-    return map_object.dataframe_struct.df_new_right_swing['_timeChangeSeconds'].sum()
+    return round(map_object.dataframe_struct.df_new_right_swing['_timeChangeSeconds'].sum(), 2)
 
 def GetLeftAvgSps(map_object):
-    return GetLeftSwings(map_object) / GetLeftTime(map_object)
+    return round(GetLeftSwings(map_object) / GetLeftTime(map_object), 2)
 
 def GetRightAvgSps(map_object):
-    return GetRightSwings(map_object) / GetRightTime(map_object)
+    return round(GetRightSwings(map_object) / GetRightTime(map_object), 2)
 
 def GetLeftAvgAngleChange(map_object):
-    return map_object.dataframe_struct.df_new_left_swing['_angleMagnitudeChange'].mean()
+    return round(map_object.dataframe_struct.df_new_left_swing['_angleMagnitudeChange'].mean(), 2)
 
 def GetRightAvgAngleChange(map_object):
-    return map_object.dataframe_struct.df_new_right_swing['_angleMagnitudeChange'].mean()
+    return round(map_object.dataframe_struct.df_new_right_swing['_angleMagnitudeChange'].mean(), 2)
 
 def GetAvgAngleChange(map_object):
-    return map_object.dataframe_struct.df_new_swing['_angleMagnitudeChange'].mean()
+    return round(map_object.dataframe_struct.df_new_swing['_angleMagnitudeChange'].mean(), 2)
 
 def GetTotalTime(map_object):
-    return map_object.dataframe_struct.df_new_swing['_timeChangeSeconds'].sum()
+    return round(map_object.dataframe_struct.df_new_swing['_timeChangeSeconds'].sum(), 2)
 
 def GetAvgSps(map_object):
-    return GetTotalSwings(map_object) / GetTotalTime(map_object)
+    return round(GetTotalSwings(map_object) / GetTotalTime(map_object), 2)
 
 def GetNumDoubles(map_object):
     return len(map_object.dataframe_struct.df_new_swing) - len(map_object.dataframe_struct.df_ignore_doubles)
 
 def GetTrueAccAvgSps(map_object):
-    return len(map_object.dataframe_struct.df_ignore_doubles) / map_object.dataframe_struct.df_ignore_doubles['_timeChangeSeconds'].sum()
+    return round(len(map_object.dataframe_struct.df_ignore_doubles) / map_object.dataframe_struct.df_ignore_doubles['_timeChangeSeconds'].sum(), 2)
 
 def HasSliders(map_object):
     num_sliders = len(map_object.dataframe_struct.df_left_sliders) + len(map_object.dataframe_struct.df_right_sliders)
@@ -74,13 +74,13 @@ def calculate_peak_sps(swings_list, interval = 10):
     return round(max_sps_sum / interval, 2)
 
 def GetLeftPeakSps(map_object):
-    return calculate_peak_sps(calculate_swings_list(map_object.dataframe_struct.df_new_left_swing))
+    return round(calculate_peak_sps(calculate_swings_list(map_object.dataframe_struct.df_new_left_swing)), 2)
 
 def GetRightPeakSps(map_object):
-    return calculate_peak_sps(calculate_swings_list(map_object.dataframe_struct.df_new_right_swing))
+    return round(calculate_peak_sps(calculate_swings_list(map_object.dataframe_struct.df_new_right_swing)), 2)
 
 def GetPeakSps(map_object):
-    return calculate_peak_sps(calculate_swings_list(map_object.dataframe_struct.df_new_swing))
+    return round(calculate_peak_sps(calculate_swings_list(map_object.dataframe_struct.df_new_swing)), 2)
 
 def GetTrueAccPeakSps(map_object):
-    return calculate_peak_sps(calculate_swings_list(map_object.dataframe_struct.df_ignore_doubles))
+    return round(calculate_peak_sps(calculate_swings_list(map_object.dataframe_struct.df_ignore_doubles)), 2)

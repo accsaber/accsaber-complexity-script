@@ -2,3 +2,4 @@ maps
 accsaber-maps
 .DS_Store
 examples
+libs/__pycache__

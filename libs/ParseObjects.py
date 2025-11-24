@@ -2,11 +2,11 @@
 This file deals with creating a DataFrame of the objects in a map
 """
 import pandas as pd
-from utils import get_pythagoras
+from libs.utils import get_pythagoras
 import math
 import os
 import json
-import MapDataFrames
+from libs.MapDataFrames import MapDataFrames
 EPSILON = 0.059 # Epsilon threshold in ms for detecting when blocks count towards the same swing
 
 def BuildNewSwingsv2(map_object, left, right):
@@ -25,14 +25,14 @@ def BuildNewSwingsv2(map_object, left, right):
     df_newLeftSwing['_xMovement'] = df_newLeftSwing.loc[:, ['_xCenter']].diff().fillna(0)
     df_newLeftSwing['_yMovement'] = df_newLeftSwing.loc[:, ['_yCenter']].diff().fillna(0)
     df_newLeftSwing['_totMovement'] = df_newLeftSwing.apply(lambda x: get_pythagoras(x['_xMovement'], x['_yMovement']), axis=1).fillna(0) 
-    df_newLeftSwing['_angleMagnitudeChange'] = abs(df_newLeftSwing.apply(lambda x: math.atan(x['_yMovement']/x['_xMovement']), axis=1))
+    df_newLeftSwing['_angleMagnitudeChange'] = abs(df_newLeftSwing.apply(lambda x: math.atan2(x['_yMovement'],x['_xMovement']), axis=1))
     df_newLeftSwing['_timeChange'] = df_newLeftSwing.loc[:, ['_time']].diff().fillna(0)
     df_newLeftSwing['_timeChangeSeconds'] = (60 * df_newLeftSwing['_timeChange']) / df_newLeftSwing['_bpm']
 
     df_newRightSwing['_xMovement'] = df_newRightSwing.loc[:, ['_xCenter']].diff().fillna(0)
     df_newRightSwing['_yMovement'] = df_newRightSwing.loc[:, ['_yCenter']].diff().fillna(0)
     df_newRightSwing['_totMovement'] = df_newRightSwing.apply(lambda x: get_pythagoras(x['_xMovement'], x['_yMovement']), axis=1).fillna(0)
-    df_newRightSwing['_angleMagnitudeChange'] = abs(df_newRightSwing.apply(lambda x: math.atan(x['_yMovement']/x['_xMovement']), axis=1))
+    df_newRightSwing['_angleMagnitudeChange'] = abs(df_newRightSwing.apply(lambda x: math.atan2(x['_yMovement'],x['_xMovement']), axis=1))
     df_newRightSwing['_timeChange'] = df_newRightSwing.loc[:, ['_time']].diff().fillna(0)
     df_newRightSwing['_timeChangeSeconds'] = (60 * df_newRightSwing['_timeChange']) / df_newRightSwing['_bpm']
 
@@ -94,14 +94,14 @@ def BuildNewSwingsv3(map_object, left, right):
     df_newLeftSwing['_xMovement'] = df_newLeftSwing.loc[:, ['_xCenter']].diff().fillna(0)
     df_newLeftSwing['_yMovement'] = df_newLeftSwing.loc[:, ['_yCenter']].diff().fillna(0)
     df_newLeftSwing['_totMovement'] = df_newLeftSwing.apply(lambda x: get_pythagoras(x['_xMovement'], x['_yMovement']), axis=1).fillna(0) 
-    df_newLeftSwing['_angleMagnitudeChange'] = abs(df_newLeftSwing.apply(lambda x: math.atan(x['_yMovement']/x['_xMovement']), axis=1))
+    df_newLeftSwing['_angleMagnitudeChange'] = abs(df_newLeftSwing.apply(lambda x: math.atan2(x['_yMovement'],x['_xMovement']), axis=1))
     df_newLeftSwing['_timeChange'] = df_newLeftSwing.loc[:, ['b']].diff().fillna(0)
     df_newLeftSwing['_timeChangeSeconds'] = (60 * df_newLeftSwing['_timeChange']) / df_newLeftSwing['_bpm']
 
     df_newRightSwing['_xMovement'] = df_newRightSwing.loc[:, ['_xCenter']].diff().fillna(0)
     df_newRightSwing['_yMovement'] = df_newRightSwing.loc[:, ['_yCenter']].diff().fillna(0)
     df_newRightSwing['_totMovement'] = df_newRightSwing.apply(lambda x: get_pythagoras(x['_xMovement'], x['_yMovement']), axis=1).fillna(0)
-    df_newRightSwing['_angleMagnitudeChange'] = abs(df_newRightSwing.apply(lambda x: math.atan(x['_yMovement']/x['_xMovement']), axis=1))
+    df_newRightSwing['_angleMagnitudeChange'] = abs(df_newRightSwing.apply(lambda x: math.atan2(x['_yMovement'],x['_xMovement']), axis=1))
     df_newRightSwing['_timeChange'] = df_newRightSwing.loc[:, ['b']].diff().fillna(0)
     df_newRightSwing['_timeChangeSeconds'] = (60 * df_newRightSwing['_timeChange']) / df_newRightSwing['_bpm']
 
@@ -142,7 +142,6 @@ def BuildObjectsDataFramev3(map_object, mapset_path, bpm_changes, diff_data, ini
     df['_bpm'] = initial_bpm
     for i in range(len(df)):
         currentTime = df.loc[i, 'b']
-        currentRow = 0
         for j in range(len(bpm_changes)):
             if currentTime >= bpm_changes.loc[j, '_time']:
                 df['_bpm'] = bpm_changes.loc[j, '_BPM']
@@ -151,13 +150,13 @@ def BuildObjectsDataFramev3(map_object, mapset_path, bpm_changes, diff_data, ini
     left = (df[df['c'] == 0]) #All left handed notes
     right = (df[df['c'] == 1]) #All right handed notes
 
-    num_notes = len(left) + len(right)
+    left = left.copy()
+    right = right.copy()
 
-    left['_timeChange'] = left.loc[:, ['b']].diff().fillna(0)
-    right['_timeChange'] = right.loc[:, ['b']].diff().fillna(0)
+    left.loc[:, '_timeChange'] = left['b'].diff().fillna(0)
+    right.loc[:, '_timeChange'] = right['b'].diff().fillna(0)
 
-
-    left['_timeChangeSeconds'] = (60 * left['_timeChange']) / left['_bpm']
-    right['_timeChangeSeconds'] = (60 * right['_timeChange']) / right['_bpm']
+    left.loc[:, '_timeChangeSeconds'] = (60 * left['_timeChange']) / left['_bpm']
+    right.loc[:, '_timeChangeSeconds'] = (60 * right['_timeChange']) / right['_bpm']
 
     BuildNewSwingsv3(map_object, left, right)
