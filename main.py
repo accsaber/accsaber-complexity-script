@@ -4,9 +4,6 @@ This is the entry point of the ranking criteria checker
 import sys
 from libs.Map import Map
 from libs.CriteriaChecker import RunCriteriaChecks
-"""
-# TODO Add bomb detector
-"""
 
 def main():
     mapset_path = "./examples/3cba5 (Hypnotized - Viking & Taddus)"
