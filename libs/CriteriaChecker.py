@@ -1,6 +1,11 @@
 """
 This file handles criteria checks
 """
+from libs.ObstacleDetector import (
+    RunAllPostBombChecks,
+    RunAllPreBombChecks,
+)
+from libs.CalculateStats import GetSectionsViolatingPeakSps
 
 def UniversalCriteriaChecks(map_object):
     """
@@ -17,12 +22,12 @@ def UniversalCriteriaChecks(map_object):
     if (map_object.metadata_version == "v2"):
         df_newLeftSwing = map_object.dataframe_struct.df_new_left_swing
         df_newRightSwing = map_object.dataframe_struct.df_new_right_swing
-        if (((df_newLeftSwing.iloc[0].loc['_cutDirection'] != 1) & (df_newLeftSwing.iloc[0].loc['_cutDirection'] != 8) & (df_newLeftSwing.iloc[0].loc['_cutDirection'] != 6) & (df_newLeftSwing.iloc[0].loc['_cutDirection'] != 7)) | ((df_newRightSwing.iloc[0].loc['_cutDirection'] != 1) & (df_newRightSwing.iloc[0].loc['_cutDirection'] != 8) & (df_newRightSwing.iloc[0].loc['_cutDirection'] != 6) & (df_newRightSwing.iloc[0].loc['_cutDirection'] != 7))):
+        if (((df_newLeftSwing.iloc[0].loc['_cutDirection'] != 1) and (df_newLeftSwing.iloc[0].loc['_cutDirection'] != 8) and (df_newLeftSwing.iloc[0].loc['_cutDirection'] != 6) and (df_newLeftSwing.iloc[0].loc['_cutDirection'] != 7)) or ((df_newRightSwing.iloc[0].loc['_cutDirection'] != 1) and (df_newRightSwing.iloc[0].loc['_cutDirection'] != 8) and (df_newRightSwing.iloc[0].loc['_cutDirection'] != 6) and (df_newRightSwing.iloc[0].loc['_cutDirection'] != 7))):
             logs_list.append("Fail: At least one of the hands does not start on a downswing\n")
     if (map_object.metadata_version == "v3"):
         df_newLeftSwing = map_object.dataframe_struct.df_new_left_swing
         df_newRightSwing = map_object.dataframe_struct.df_new_right_swing
-        if (((df_newLeftSwing.iloc[0].loc['d'] != 1) & (df_newLeftSwing.iloc[0].loc['d'] != 8) & (df_newLeftSwing.iloc[0].loc['d'] != 6) & (df_newLeftSwing.iloc[0].loc['d'] != 7)) | ((df_newRightSwing.iloc[0].loc['d'] != 1) & (df_newRightSwing.iloc[0].loc['d'] != 8) & (df_newRightSwing.iloc[0].loc['d'] != 6) & (df_newRightSwing.iloc[0].loc['d'] != 7))):
+        if (((df_newLeftSwing.iloc[0].loc['d'] != 1) and (df_newLeftSwing.iloc[0].loc['d'] != 8) and (df_newLeftSwing.iloc[0].loc['d'] != 6) and (df_newLeftSwing.iloc[0].loc['d'] != 7)) or ((df_newRightSwing.iloc[0].loc['d'] != 1) and (df_newRightSwing.iloc[0].loc['d'] != 8) and (df_newRightSwing.iloc[0].loc['d'] != 6) and (df_newRightSwing.iloc[0].loc['d'] != 7))):
             logs_list.append("Fail: At least one of the hands does not start on a downswing\n")
 
     # Note count minimum: 115
@@ -31,7 +36,10 @@ def UniversalCriteriaChecks(map_object):
         logs_list.append("Fail: There are " + str(notes) + " notes, which is less than 115\n")
 
     # Min space before notes after bombs: 150ms
-    # TODO
+    violations = RunAllPostBombChecks(map_object)
+    if (len(violations) > 0):
+        for entry in violations:
+            logs_list.append("Fail: This breaks the post-bomb criteria at beat " + str(entry) + " \n")
 
 def TrueAccCriteriaChecks(map_object):
     """
@@ -52,7 +60,10 @@ def TrueAccCriteriaChecks(map_object):
     # Max peak SPS counting doubles as one swing: 1.75
     true_acc_peak_sps = map_object.statistics.true_acc_peak_sps
     if (true_acc_peak_sps > 1.75):
-        logs_list.append("Fail: the max peak sps counting doubles as one swing is " + str(true_acc_peak_sps)) + " swings per second, which is more than 1.75\n"
+        logs_list.append("Fail: the max peak sps counting doubles as one swing is " + str(true_acc_peak_sps) + " swings per second, which is more than 1.75\n")
+        violations = GetSectionsViolatingPeakSps(map_object)
+        for entry in violations:
+            logs_list.append("Fail: This breaks the true acc peak sps criteria at beat " + str(entry) + " \n")
 
     # Max average SPS counting doubles as one swing: 1.5
     true_acc_avg_sps = map_object.statistics.true_acc_avg_sps
@@ -64,7 +75,10 @@ def TrueAccCriteriaChecks(map_object):
         logs_list.append("Fail: There are sliders, stacks, towers, or windows in this map\n")
 
     # Min time after notes before bombs: 500ms
-    # TODO
+    violations = RunAllPreBombChecks(map_object)
+    if (len(violations) > 0):
+        for entry in violations:
+            logs_list.append("Fail: This breaks the pre-bomb criteria at beat " + str(entry) + " \n")
 
 
 def StandardAccCriteriaChecks(map_object):
@@ -88,6 +102,9 @@ def StandardAccCriteriaChecks(map_object):
     peak_sps = map_object.statistics.peak_sps
     if (peak_sps > 6.25):
         logs_list.append("Fail: the peak sps is " + str(peak_sps) + " swings per second, which is more than 6.25\n")
+        violations = GetSectionsViolatingPeakSps(map_object)
+        for entry in violations:
+            logs_list.append("Fail: This breaks the standard acc peak sps criteria at beat " + str(entry) + " \n")
 
     # Max average SPS: 4
     avg_sps = map_object.statistics.avg_sps
@@ -101,10 +118,11 @@ def StandardAccCriteriaChecks(map_object):
     # Bombs that don't affect swing path and are placed against the 
     # direction of the previous swing will only require y =1500/x 
     # of distance from the previous note, where x is the NJS
-    # TODO
-
     # For other cases, min time after notes before bombs: 350ms
-    # TODO
+    violations = RunAllPreBombChecks(map_object)
+    if (len(violations) > 0):
+        for entry in violations:
+            logs_list.append("Fail: This breaks the pre-bomb criteria at beat " + str(entry) + " \n")
 
 def TechAccCriteriaChecks(map_object):
     """
@@ -126,6 +144,9 @@ def TechAccCriteriaChecks(map_object):
     peak_sps = map_object.statistics.peak_sps
     if (peak_sps > 6.25):
         logs_list.append("Fail: the peak sps is " + str(peak_sps) + " swings per second, which is more than 6.25\n")
+        violations = GetSectionsViolatingPeakSps(map_object)
+        for entry in violations:
+            logs_list.append("Fail: This breaks the tech acc peak sps criteria at beat " + str(entry) + " \n")
 
     # Max average SPS: 4
     avg_sps = map_object.statistics.avg_sps
@@ -135,10 +156,11 @@ def TechAccCriteriaChecks(map_object):
     # Bombs that don't affect swing path and are placed against the 
     # direction of the previous swing will only require y =1500/x 
     # of distance from the previous note, where x is the NJS
-    # TODO
-
     # For other cases, min time after notes before bombs: 300ms
-    # TODO
+    violations = RunAllPreBombChecks(map_object)
+    if (len(violations) > 0):
+        for entry in violations:
+            logs_list.append("Fail: This breaks the pre-bomb criteria at beat " + str(entry) + " \n")
 
 
 def RunCriteriaChecks(map_object):

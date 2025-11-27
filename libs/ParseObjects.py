@@ -9,7 +9,7 @@ import json
 from libs.MapDataFrames import MapDataFrames
 EPSILON = 0.059 # Epsilon threshold in ms for detecting when blocks count towards the same swing
 
-def BuildNewSwingsv2(map_object, left, right):
+def BuildNewSwingsv2(map_object, left, right, df):
     """
     Sets the df_left, df_right, df_new_left_swing, df_new_right_swing, df_left_sliders, df_right_sliders, df_new_swing, and df_ignore_doubles fields of map_object.dataframe_struct
     """
@@ -49,7 +49,8 @@ def BuildNewSwingsv2(map_object, left, right):
     df_ignoreDoubles = df_newSwing.groupby('_seconds', as_index=False).agg('first')
 
     # Set the dataframe_struct field of map_object
-    dfs = MapDataFrames(left, right, df_newLeftSwing, df_newRightSwing, df_leftSliders, df_rightSliders, df_newSwing, df_ignoreDoubles)
+    df_bombs = pd.DataFrame([])
+    dfs = MapDataFrames(df, df_bombs, left, right, df_newLeftSwing, df_newRightSwing, df_leftSliders, df_rightSliders, df_newSwing, df_ignoreDoubles)
     map_object.dataframe_struct = dfs
     
 def BuildObjectsDataFramev2(map_object, bpm_changes, diff_data, initial_bpm):
@@ -57,31 +58,36 @@ def BuildObjectsDataFramev2(map_object, bpm_changes, diff_data, initial_bpm):
     Builds the DataFrame of all objects for maps using v2 metadata
     """
     df = pd.DataFrame(diff_data['_notes'])
-    df['_yCenter'] = df.loc[:, ('_lineLayer')].apply(lambda x: 1 + x * 0.55)
-    df['_xCenter'] = df.loc[:, ('_lineIndex')].apply(lambda x: -0.9 + x * 0.6)
+    df['_yCenter'] = df['_lineLayer'].apply(lambda x: 1 + x * 0.55)
+    df['_xCenter'] = df['_lineIndex'].apply(lambda x: -0.9 + x * 0.6)
 
     #Add bpm column
     df['_bpm'] = initial_bpm
     for i in range(len(df)):
         currentTime = df.loc[i, '_time']
         for j in range(len(bpm_changes)):
-            if currentTime >= bpm_changes.loc[j, '_time']:
-                df['_bpm'] = bpm_changes.loc[j, '_BPM']
+            if currentTime < bpm_changes.loc[j, '_time']:
+                break
+            df.loc[i, '_bpm'] = bpm_changes.loc[j, '_BPM']
    
    
-    left = (df[df['_type'] == 0]) #All left handed notes
-    right = (df[df['_type'] == 1]) #All right handed notes
+    left = df[df['_type'] == 0].copy() #All left handed notes
+    right = df[df['_type'] == 1].copy() #All right handed notes
 
-    left['_timeChange'] = left.loc[:, ['_time']].diff().fillna(0)
-    right['_timeChange'] = right.loc[:, ['_time']].diff().fillna(0)
+    left['_timeChange'] = left['_time'].diff().fillna(0)
+    right['_timeChange'] = right['_time'].diff().fillna(0)
 
 
     left['_timeChangeSeconds'] = (60 * left['_timeChange']) / left['_bpm']
     right['_timeChangeSeconds'] = (60 * right['_timeChange']) / right['_bpm']
 
-    BuildNewSwingsv2(map_object, left, right)
+    df['_timeChange'] = df['_time'].diff().fillna(0)
+    df['_timeChangeSeconds'] = (60 * df['_timeChange']) / df['_bpm']
+    df['_seconds'] = df['_timeChangeSeconds'].cumsum()
 
-def BuildNewSwingsv3(map_object, left, right):
+    BuildNewSwingsv2(map_object, left, right, df)
+
+def BuildNewSwingsv3(map_object, left, right, df, df_bombs):
     firstLeftSwingIndex = left.head(1).index[0]
     firstRightSwingIndex = right.head(1).index[0]
 
@@ -115,9 +121,8 @@ def BuildNewSwingsv3(map_object, left, right):
     df_newRightSwing['_seconds'] = df_newRightSwing['_timeChangeSeconds'].cumsum()
     df_newSwing['_seconds'] = df_newSwing['_timeChangeSeconds'].cumsum()
     df_ignoreDoubles = df_newSwing.groupby('_seconds', as_index=False).agg('first')
-
     # Set the dataframe_struct field of map_object
-    dfs = MapDataFrames(left, right, df_newLeftSwing, df_newRightSwing, df_leftSliders, df_rightSliders, df_newSwing, df_ignoreDoubles)
+    dfs = MapDataFrames(df, df_bombs, left, right, df_newLeftSwing, df_newRightSwing, df_leftSliders, df_rightSliders, df_newSwing, df_ignoreDoubles)
     map_object.dataframe_struct = dfs
 
 
@@ -135,28 +140,59 @@ def BuildObjectsDataFramev3(map_object, mapset_path, bpm_changes, diff_data, ini
     bpm_changes['_time'] = bpm_changes['_change_in_time'].cumsum()
 
     df = pd.DataFrame(diff_data['colorNotes'])
-    df['_yCenter'] = df.loc[:, ('y')].apply(lambda x: 1 + x * 0.55)
-    df['_xCenter'] = df.loc[:, ('x')].apply(lambda x: -0.9 + x * 0.6)
+    df['_yCenter'] = df['y'].apply(lambda x: 1 + x * 0.55)
+    df['_xCenter'] = df['x'].apply(lambda x: -0.9 + x * 0.6)
 
     #Add bpm column
     df['_bpm'] = initial_bpm
     for i in range(len(df)):
         currentTime = df.loc[i, 'b']
         for j in range(len(bpm_changes)):
-            if currentTime >= bpm_changes.loc[j, '_time']:
-                df['_bpm'] = bpm_changes.loc[j, '_BPM']
+            if currentTime < bpm_changes.loc[j, '_time']:
+                break
+            df.loc[i, '_bpm'] = bpm_changes.loc[j, '_BPM']
    
    
-    left = (df[df['c'] == 0]) #All left handed notes
-    right = (df[df['c'] == 1]) #All right handed notes
+    left = df[df['c'] == 0].copy() #All left handed notes
+    right = df[df['c'] == 1].copy() #All right handed notes
 
-    left = left.copy()
-    right = right.copy()
+    left['_timeChange'] = left['b'].diff().fillna(0)
+    right['_timeChange'] = right['b'].diff().fillna(0)
 
-    left.loc[:, '_timeChange'] = left['b'].diff().fillna(0)
-    right.loc[:, '_timeChange'] = right['b'].diff().fillna(0)
+    left['_timeChangeSeconds'] = (60 * left['_timeChange']) / left['_bpm']
+    right['_timeChangeSeconds'] = (60 * right['_timeChange']) / right['_bpm']
 
-    left.loc[:, '_timeChangeSeconds'] = (60 * left['_timeChange']) / left['_bpm']
-    right.loc[:, '_timeChangeSeconds'] = (60 * right['_timeChange']) / right['_bpm']
+    df_BPMChanges = map_object.bpm_changes
+    initialBPM = map_object.initial_bpm
+    diffData = map_object.diff_data
 
-    BuildNewSwingsv3(map_object, left, right)
+    df_bombs = pd.DataFrame(diffData['bombNotes'])
+
+    if (len(df_bombs) > 0):
+        
+        #Add bomb columns
+        df_bombs['c'] = 3
+        df_bombs['d'] = 8
+        df_bombs['a'] = 0
+
+        df_bombs['_yCenter'] = df_bombs['y'].apply(lambda x: 1 + x * 0.55)
+        df_bombs['_xCenter'] = df_bombs['x'].apply(lambda x: -0.9 + x * 0.6)
+
+        #Add bpm column
+        df_bombs['_bpm'] = initialBPM
+        for i in range(len(df_bombs)):
+            currentTime = df_bombs.loc[i, 'b']
+            for j in range(len(df_BPMChanges)):
+                if currentTime < df_BPMChanges.loc[j, '_time']:
+                    break
+                df_bombs.loc[i, '_bpm'] = df_BPMChanges.loc[j, '_BPM']
+
+        df_bombs['_timeChange'] = df_bombs['b'].diff().fillna(0)
+        df_bombs['_timeChangeSeconds'] = (60 * df_bombs['_timeChange']) / df_bombs['_bpm']
+
+
+    df['_timeChange'] = df['b'].diff().fillna(0)
+    df['_timeChangeSeconds'] = (60 * df['_timeChange']) / df['_bpm']
+    df['_seconds'] = df['_timeChangeSeconds'].cumsum()
+
+    BuildNewSwingsv3(map_object, left, right, df, df_bombs)

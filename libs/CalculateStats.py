@@ -84,3 +84,61 @@ def GetPeakSps(map_object):
 
 def GetTrueAccPeakSps(map_object):
     return round(calculate_peak_sps(calculate_swings_list(map_object.dataframe_struct.df_ignore_doubles)), 2)
+
+def get_swings_with_beats(df):
+    """
+    Returns a list of (sps_value, beat_or_seconds_value)
+    where each entry corresponds to one swing.
+    """
+    swings = calculate_swings_list(df)
+
+    # df_ignore_doubles and swings_list align by index!
+    beats = df['_seconds'].tolist()     # consistent across v2/v3
+
+    return list(zip(swings, beats))
+
+def GetSectionsViolatingPeakSps(map_object, interval=10):
+    violations = []
+    category = map_object.category
+
+    # Only true acc uses peak SPS limit 1.75
+    if category == "true":
+        df_swing = map_object.dataframe_struct.df_ignore_doubles
+        swings_with_beats = get_swings_with_beats(df_swing)
+
+        # Unzip into two lists
+        sps_list = [x[0] for x in swings_with_beats]
+        beat_list = [x[1] for x in swings_with_beats]
+
+        # Sliding window sum
+        current_sum = sum(sps_list[:interval])
+
+        for i in range(len(sps_list) - interval):
+            current_sum = current_sum - sps_list[i] + sps_list[i + interval]
+            current_sps = current_sum / interval
+
+            if current_sps > 1.75:
+                # record the beats involved in this violating window
+                violating_window_beats = beat_list[i : i + interval + 1]
+                violations.append(violating_window_beats)
+    else:
+        df_swing = map_object.dataframe_struct.df_new_swing
+        swings_with_beats = get_swings_with_beats(df_swing)
+
+        # Unzip into two lists
+        sps_list = [x[0] for x in swings_with_beats]
+        beat_list = [x[1] for x in swings_with_beats]
+
+        # Sliding window sum
+        current_sum = sum(sps_list[:interval])
+
+        for i in range(len(sps_list) - interval):
+            current_sum = current_sum - sps_list[i] + sps_list[i + interval]
+            current_sps = current_sum / interval
+
+            if current_sps > 6.25:
+                # record the beats involved in this violating window
+                violating_window_beats = beat_list[i : i + interval + 1]
+                violations.append(violating_window_beats)
+
+    return violations
