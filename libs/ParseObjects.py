@@ -9,6 +9,22 @@ import json
 from libs.MapDataFrames import MapDataFrames
 EPSILON = 0.059 # Epsilon threshold in ms for detecting when blocks count towards the same swing
 
+def sanitize_notes_df(df, beat_col):
+    """
+    Sort notes by beat, compute _timeChange, fix negatives, recompute seconds.
+    This prevents false slider detection and ensures consistent timing.
+    """
+    # Sort by beat
+    df = df.sort_values(beat_col).reset_index(drop=True)
+
+    # Compute time delta
+    df["_timeChange"] = df[beat_col].diff().fillna(0)
+
+    # Remove negative deltas (caused by editor export ordering / duplicates)
+    df.loc[df["_timeChange"] < 0, "_timeChange"] = 0
+
+    return df
+
 def BuildNewSwingsv2(map_object, left, right, df):
     """
     Sets the df_left, df_right, df_new_left_swing, df_new_right_swing, df_left_sliders, df_right_sliders, df_new_swing, and df_ignore_doubles fields of map_object.dataframe_struct
@@ -16,10 +32,10 @@ def BuildNewSwingsv2(map_object, left, right, df):
     firstLeftSwingIndex = left.head(1).index[0]
     firstRightSwingIndex = right.head(1).index[0]
 
-    df_newLeftSwing = left[((((60 * left['_timeChange']) / left['_bpm']) > EPSILON) | (left.index == firstLeftSwingIndex))]
-    df_newRightSwing = right[((((60 * right['_timeChange']) / right['_bpm']) > EPSILON) | (right.index == firstRightSwingIndex))]
-    df_leftSliders = left[(((60 * left['_timeChange']) / left['_bpm']) < EPSILON) & (left['_timeChange'] != 0)]
-    df_rightSliders = right[(((60 * right['_timeChange']) / right['_bpm']) < EPSILON) & (right['_timeChange'] != 0)]
+    df_newLeftSwing = left[((((60 * left['_timeChange']) / left['_bpm']) > EPSILON) | (left.index == firstLeftSwingIndex))].copy()
+    df_newRightSwing = right[((((60 * right['_timeChange']) / right['_bpm']) > EPSILON) | (right.index == firstRightSwingIndex))].copy()
+    df_leftSliders = left[(((60 * left['_timeChange']) / left['_bpm']) < EPSILON) & (left['_timeChange'] != 0)].copy()
+    df_rightSliders = right[(((60 * right['_timeChange']) / right['_bpm']) < EPSILON) & (right['_timeChange'] != 0)].copy()
 
     #Create and update columns
     df_newLeftSwing['_xMovement'] = df_newLeftSwing.loc[:, ['_xCenter']].diff().fillna(0)
@@ -52,31 +68,46 @@ def BuildNewSwingsv2(map_object, left, right, df):
     df_bombs = pd.DataFrame([])
     dfs = MapDataFrames(df, df_bombs, left, right, df_newLeftSwing, df_newRightSwing, df_leftSliders, df_rightSliders, df_newSwing, df_ignoreDoubles)
     map_object.dataframe_struct = dfs
-    
+
 def BuildObjectsDataFramev2(map_object, bpm_changes, diff_data, initial_bpm):
     """
     Builds the DataFrame of all objects for maps using v2 metadata
     """
+    if bpm_changes is None or len(bpm_changes) == 0:
+        df = pd.DataFrame(diff_data['_notes'])
+        df['_yCenter'] = df['_lineLayer'].apply(lambda x: 1 + x * 0.55)
+        df['_xCenter'] = df['_lineIndex'].apply(lambda x: -0.9 + x * 0.6)
+        df = sanitize_notes_df(df, "_time")
+        df['_bpm'] = initial_bpm
+        df['_timeChange'] = df['_time'].diff().fillna(0)
+        df['_timeChangeSeconds'] = (60 * df['_timeChange']) / df['_bpm']
+        df['_seconds'] = df['_timeChangeSeconds'].cumsum()
+        left = sanitize_notes_df(df[df['_type'] == 0].copy(), "_time")
+        right = sanitize_notes_df(df[df['_type'] == 1].copy(), "_time")
+        BuildNewSwingsv2(map_object, left, right, df)
+        return
+    
+    if "BPM" in bpm_changes.columns and "_BPM" not in bpm_changes.columns:
+        bpm_changes["_BPM"] = bpm_changes["BPM"]
+    if "startBeat" in bpm_changes.columns and "endBeat" in bpm_changes.columns:
+        bpm_changes["_change_in_time"] = (bpm_changes["endBeat"] - bpm_changes["startBeat"]) * (60 / bpm_changes["_BPM"])
+    bpm_changes["_time"] = bpm_changes["_change_in_time"].cumsum()
+
     df = pd.DataFrame(diff_data['_notes'])
     df['_yCenter'] = df['_lineLayer'].apply(lambda x: 1 + x * 0.55)
     df['_xCenter'] = df['_lineIndex'].apply(lambda x: -0.9 + x * 0.6)
-
-    #Add bpm column
     df['_bpm'] = initial_bpm
+
     for i in range(len(df)):
         currentTime = df.loc[i, '_time']
         for j in range(len(bpm_changes)):
-            if currentTime < bpm_changes.loc[j, '_time']:
+            note_seconds = (currentTime * 60) / df.loc[i, '_bpm']
+            if note_seconds < bpm_changes.loc[j, '_time']:
                 break
             df.loc[i, '_bpm'] = bpm_changes.loc[j, '_BPM']
-   
-   
-    left = df[df['_type'] == 0].copy() #All left handed notes
-    right = df[df['_type'] == 1].copy() #All right handed notes
 
-    left['_timeChange'] = left['_time'].diff().fillna(0)
-    right['_timeChange'] = right['_time'].diff().fillna(0)
-
+    left = sanitize_notes_df(df[df['_type'] == 0].copy(), "_time")
+    right = sanitize_notes_df(df[df['_type'] == 1].copy(), "_time")
 
     left['_timeChangeSeconds'] = (60 * left['_timeChange']) / left['_bpm']
     right['_timeChangeSeconds'] = (60 * right['_timeChange']) / right['_bpm']
@@ -87,14 +118,15 @@ def BuildObjectsDataFramev2(map_object, bpm_changes, diff_data, initial_bpm):
 
     BuildNewSwingsv2(map_object, left, right, df)
 
+
 def BuildNewSwingsv3(map_object, left, right, df, df_bombs):
     firstLeftSwingIndex = left.head(1).index[0]
     firstRightSwingIndex = right.head(1).index[0]
 
-    df_newLeftSwing = left[((((60 * left['_timeChange']) / left['_bpm']) > EPSILON) | (left.index == firstLeftSwingIndex))]
-    df_newRightSwing = right[((((60 * right['_timeChange']) / right['_bpm']) > EPSILON) | (right.index == firstRightSwingIndex))]
-    df_leftSliders = left[(((60 * left['_timeChange']) / left['_bpm']) < EPSILON) & (left['_timeChange'] != 0)]
-    df_rightSliders = right[(((60 * right['_timeChange']) / right['_bpm']) < EPSILON) & (right['_timeChange'] != 0)]
+    df_newLeftSwing = left[((((60 * left['_timeChange']) / left['_bpm']) > EPSILON) | (left.index == firstLeftSwingIndex))].copy()
+    df_newRightSwing = right[((((60 * right['_timeChange']) / right['_bpm']) > EPSILON) | (right.index == firstRightSwingIndex))].copy()
+    df_leftSliders = left[(((60 * left['_timeChange']) / left['_bpm']) < EPSILON) & (left['_timeChange'] != 0)].copy()
+    df_rightSliders = right[(((60 * right['_timeChange']) / right['_bpm']) < EPSILON) & (right['_timeChange'] != 0)].copy()
 
     #Create and update columns
     df_newLeftSwing['_xMovement'] = df_newLeftSwing.loc[:, ['_xCenter']].diff().fillna(0)
@@ -125,71 +157,140 @@ def BuildNewSwingsv3(map_object, left, right, df, df_bombs):
     dfs = MapDataFrames(df, df_bombs, left, right, df_newLeftSwing, df_newRightSwing, df_leftSliders, df_rightSliders, df_newSwing, df_ignoreDoubles)
     map_object.dataframe_struct = dfs
 
-
 def BuildObjectsDataFramev3(map_object, mapset_path, bpm_changes, diff_data, initial_bpm):
     """
     Builds the DataFrame of all objects for maps using v3 metadata
     """
+    if bpm_changes is None or len(bpm_changes) == 0:
+        df = pd.DataFrame(diff_data['colorNotes'])
+        df['_yCenter'] = df['y'].apply(lambda x: 1 + x * 0.55)
+        df['_xCenter'] = df['x'].apply(lambda x: -0.9 + x * 0.6)
+        df = sanitize_notes_df(df, "b")
+        df['_bpm'] = initial_bpm
+        df['_timeChange'] = df['b'].diff().fillna(0)
+        df['_timeChangeSeconds'] = (60 * df['_timeChange']) / df['_bpm']
+        df['_seconds'] = df['_timeChangeSeconds'].cumsum()
+        df_bombs = pd.DataFrame(diff_data.get('bombNotes', []))
+        df_bombs = sanitize_notes_df(df_bombs, "b")
+        left = sanitize_notes_df(df[df['c'] == 0].copy(), "b")
+        right = sanitize_notes_df(df[df['c'] == 1].copy(), "b")
+        BuildNewSwingsv3(map_object, left, right, df, df_bombs)
+        return
+
+    if "BPM" in bpm_changes.columns:
+        bpm_changes["_BPM"] = bpm_changes["BPM"]
+
+    last_note_beat = 0
+    if "colorNotes" in diff_data and len(diff_data["colorNotes"]) > 0:
+        last_note_beat = pd.DataFrame(diff_data["colorNotes"])["b"].max()
+
     bpmPath = os.path.join(mapset_path, "BPMInfo.dat")
     if os.path.exists(bpmPath):
         with open(bpmPath, encoding="utf-8") as bpm_json_data:
             bpmData = json.load(bpm_json_data)
         song_frequency = bpmData.get('_songFrequency', 44100)
-    bpm_changes['_change_in_time'] = (bpm_changes['_endSampleIndex'] - bpm_changes['_startSampleIndex']) / song_frequency
-    bpm_changes['_BPM'] = (bpm_changes['_endBeat'] - bpm_changes['_startBeat']) * (60 / bpm_changes['_change_in_time'])
+
+    # Normalize column names so we can handle different BPM change sources uniformly
+    if "startBeat" in bpm_changes.columns and "_startBeat" not in bpm_changes.columns:
+        bpm_changes["_startBeat"] = bpm_changes["startBeat"]
+    if "endBeat" in bpm_changes.columns and "_endBeat" not in bpm_changes.columns:
+        bpm_changes["_endBeat"] = bpm_changes["endBeat"]
+    if "b" in bpm_changes.columns and "_startBeat" not in bpm_changes.columns:
+        bpm_changes["_startBeat"] = bpm_changes["b"]
+    if "m" in bpm_changes.columns and "_BPM" not in bpm_changes.columns:
+        bpm_changes["_BPM"] = bpm_changes["m"]
+
+    start_col = "_startBeat" if "_startBeat" in bpm_changes.columns else "startBeat"
+    end_col = "_endBeat" if "_endBeat" in bpm_changes.columns else "endBeat"
+
+    # Derive end beats if missing (e.g., single-point BPM changes)
+    if end_col not in bpm_changes.columns:
+        bpm_changes[end_col] = bpm_changes[start_col].shift(-1)
+        bpm_changes.loc[bpm_changes[end_col].isna(), end_col] = last_note_beat
+
+    source = bpm_changes["source"].iloc[0]
+    MIN_SEGMENT_SECONDS = 0.01
+    if source == "BPMInfo":
+        bpm_changes['_change_in_time'] = (bpm_changes['_endSampleIndex'] - bpm_changes['_startSampleIndex']) / song_frequency
+        bpm_changes['_BPM'] = (bpm_changes['_endBeat'] - bpm_changes['_startBeat']) * (60 / bpm_changes['_change_in_time'])
+    else:
+        bpm_changes['_change_in_time'] = (bpm_changes[end_col] - bpm_changes[start_col]) * (60 / bpm_changes['_BPM'])
+
+    # Clamp absurd BPM spikes (e.g., m=100000 used as placeholders) to previous/initial BPM
+    for idx in range(len(bpm_changes)):
+        if bpm_changes.loc[idx, '_BPM'] > 1000:
+            fallback_bpm = initial_bpm if idx == 0 else bpm_changes.loc[idx - 1, '_BPM']
+            bpm_changes.loc[idx, '_BPM'] = fallback_bpm
+            bpm_changes.loc[idx, '_change_in_time'] = (bpm_changes.loc[idx, end_col] - bpm_changes.loc[idx, start_col]) * (60 / bpm_changes.loc[idx, '_BPM'])
+
+    # Clamp tiny segments to previous BPM to avoid absurd values from sub-10ms regions
+    for idx in range(1, len(bpm_changes)):
+        if bpm_changes.loc[idx, '_change_in_time'] < MIN_SEGMENT_SECONDS:
+            bpm_changes.loc[idx, '_BPM'] = bpm_changes.loc[idx - 1, '_BPM']
+
     bpm_changes['_time'] = bpm_changes['_change_in_time'].cumsum()
 
     df = pd.DataFrame(diff_data['colorNotes'])
     df['_yCenter'] = df['y'].apply(lambda x: 1 + x * 0.55)
     df['_xCenter'] = df['x'].apply(lambda x: -0.9 + x * 0.6)
-
-    #Add bpm column
     df['_bpm'] = initial_bpm
+
+    bpm_changes = bpm_changes.sort_values(start_col).reset_index(drop=True)
+
+    def beat_to_seconds(beat_value):
+        """
+        Convert a beat value to seconds using BPM change regions.
+        Falls back to initial BPM if regions are missing.
+        """
+        if start_col not in bpm_changes.columns or end_col not in bpm_changes.columns:
+            return (beat_value * 60) / initial_bpm
+
+        for idx, row in bpm_changes.iterrows():
+            start_beat = row[start_col]
+            end_beat = row[end_col]
+            start_time = row["_time"] - row["_change_in_time"]
+
+            if beat_value < end_beat:
+                return start_time + (beat_value - start_beat) * (60 / row["_BPM"])
+
+        # After last region, extrapolate with last BPM
+        last = bpm_changes.iloc[-1]
+        return last["_time"] + (beat_value - last[end_col]) * (60 / last["_BPM"])
+
     for i in range(len(df)):
-        currentTime = df.loc[i, 'b']
+        note_seconds = beat_to_seconds(df.loc[i, 'b'])
         for j in range(len(bpm_changes)):
-            if currentTime < bpm_changes.loc[j, '_time']:
+            if note_seconds < bpm_changes.loc[j, '_time']:
                 break
             df.loc[i, '_bpm'] = bpm_changes.loc[j, '_BPM']
-   
-   
-    left = df[df['c'] == 0].copy() #All left handed notes
-    right = df[df['c'] == 1].copy() #All right handed notes
 
-    left['_timeChange'] = left['b'].diff().fillna(0)
-    right['_timeChange'] = right['b'].diff().fillna(0)
+    left = sanitize_notes_df(df[df['c'] == 0].copy(), "b")
+    right = sanitize_notes_df(df[df['c'] == 1].copy(), "b")
 
     left['_timeChangeSeconds'] = (60 * left['_timeChange']) / left['_bpm']
     right['_timeChangeSeconds'] = (60 * right['_timeChange']) / right['_bpm']
 
-    df_BPMChanges = map_object.bpm_changes
-    initialBPM = map_object.initial_bpm
-    diffData = map_object.diff_data
+    df_BPMChanges = bpm_changes
+    initialBPM = initial_bpm
+    diffData = diff_data
+    df_bombs = pd.DataFrame(diffData.get('bombNotes', []))
 
-    df_bombs = pd.DataFrame(diffData['bombNotes'])
-
-    if (len(df_bombs) > 0):
-        
-        #Add bomb columns
+    if len(df_bombs) > 0:
         df_bombs['c'] = 3
         df_bombs['d'] = 8
         df_bombs['a'] = 0
-
         df_bombs['_yCenter'] = df_bombs['y'].apply(lambda x: 1 + x * 0.55)
         df_bombs['_xCenter'] = df_bombs['x'].apply(lambda x: -0.9 + x * 0.6)
-
-        #Add bpm column
         df_bombs['_bpm'] = initialBPM
         for i in range(len(df_bombs)):
-            currentTime = df_bombs.loc[i, 'b']
+            note_seconds = beat_to_seconds(df_bombs.loc[i, 'b'])
             for j in range(len(df_BPMChanges)):
-                if currentTime < df_BPMChanges.loc[j, '_time']:
+                if note_seconds < df_BPMChanges.loc[j, '_time']:
                     break
                 df_bombs.loc[i, '_bpm'] = df_BPMChanges.loc[j, '_BPM']
-
         df_bombs['_timeChange'] = df_bombs['b'].diff().fillna(0)
         df_bombs['_timeChangeSeconds'] = (60 * df_bombs['_timeChange']) / df_bombs['_bpm']
-
+        df_bombs['_seconds'] = df_bombs['_timeChangeSeconds'].cumsum()
 
     df['_timeChange'] = df['b'].diff().fillna(0)
     df['_timeChangeSeconds'] = (60 * df['_timeChange']) / df['_bpm']

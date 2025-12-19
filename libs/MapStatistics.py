@@ -69,10 +69,13 @@ class MapStatistics:
         self.avg_sps = GetAvgSps(map_object)
         self.number_doubles = GetNumDoubles(map_object)
         self.true_acc_avg_sps = GetTrueAccAvgSps(map_object)
-        self.has_sliders = HasSliders(map_object)
+        self.has_sliders = HasSliders(
+            map_object,
+            map_object.dataframe_struct.df_left,
+            map_object.dataframe_struct.df_right,
+        )
         self.number_notes = GetNumNotes(map_object)
         self.left_peak_sps = GetLeftPeakSps(map_object)
         self.right_peak_sps = GetRightPeakSps(map_object)
         self.peak_sps = GetPeakSps(map_object)
         self.true_acc_peak_sps = GetTrueAccPeakSps(map_object)
-

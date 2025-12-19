@@ -21,34 +21,81 @@ def DetectMetadataVersion(diff_data):
             return "v3"
     return "Error: not a v2 or v3 map"
 
-
 def GetBpmChanges(mapset_path, diff_info):
     """
     Returns a DataFrame of BPM Changes or an empty DataFrame if there are no BPM changes
     """
     bpmPath = os.path.join(mapset_path, "BPMInfo.dat")
+
+    rename_map = {
+        "startBeat": "_startBeat",
+        "endBeat": "_endBeat",
+        "_startBeat": "_startBeat",
+        "_endBeat": "_endBeat"
+    }
     if os.path.exists(bpmPath):
-        with open(bpmPath, encoding="utf-8") as bpm_json_data:
-            bpmData = json.load(bpm_json_data)
-        song_frequency = bpmData.get('_songFrequency', 44100)
-        bpmChangesDict = bpmData.get('_regions', [])
-        df_BPMChanges = pd.DataFrame(bpmChangesDict)
-        if not df_BPMChanges.empty:
-            df_BPMChanges['_change_in_time'] = (df_BPMChanges['_endSampleIndex'] - df_BPMChanges['_startSampleIndex']) / song_frequency
-            df_BPMChanges['_BPM'] = (df_BPMChanges['_endBeat'] - df_BPMChanges['_startBeat']) * (60 / df_BPMChanges['_change_in_time'])
-            df_BPMChanges['_time'] = df_BPMChanges['_change_in_time'].cumsum()
-        df_BPMChanges["source"] = "BPMInfo"
-        return df_BPMChanges
-    customData = diff_info.get('_customData', {})
+        with open(bpmPath, encoding="utf-8") as f:
+            bpmData = json.load(f)
+
+        song_frequency = bpmData.get("_songFrequency", 44100)
+        df = pd.DataFrame(bpmData.get("_regions", []))
+
+        df = df.rename(columns=rename_map, errors="ignore")
+
+        if not df.empty and "_endSampleIndex" in df and "_startSampleIndex" in df:
+            df["_change_in_time"] = (df["_endSampleIndex"] - df["_startSampleIndex"]) / song_frequency
+            df["_BPM"] = (df["_endBeat"] - df["_startBeat"]) * (60 / df["_change_in_time"])
+            df["_time"] = df["_change_in_time"].cumsum()
+
+        df["source"] = "BPMInfo"
+        return df
+
+    customData = diff_info.get("_customData", {})
+
     if "_BPMChanges" in customData:
-        df_BPMChanges = pd.DataFrame(customData['_BPMChanges'])
-        df_BPMChanges["source"] = "V2_custom"
-        return df_BPMChanges
+        df = pd.DataFrame(customData["_BPMChanges"])
+        df = df.rename(columns=rename_map, errors="ignore")
+
+        if not df.empty:
+            if "BPM" in df:
+                df["_BPM"] = df["BPM"]
+
+            if "_startBeat" in df and "_endBeat" in df and "_BPM" in df:
+                df["_change_in_time"] = (df["_endBeat"] - df["_startBeat"]) * (60 / df["_BPM"])
+                df["_time"] = df["_change_in_time"].cumsum()
+
+        df["source"] = "V2_custom"
+        return df
+
     if "bpmEvents" in diff_info:
-        df_BPMChanges = pd.DataFrame(diff_info["bpmEvents"])
-        df_BPMChanges["source"] = "V3_official"
-        return df_BPMChanges
-    return pd.DataFrame([])
+        df = pd.DataFrame(diff_info["bpmEvents"])
+        df = df.rename(columns=rename_map, errors="ignore")
+
+        if not df.empty:
+            if "BPM" in df:
+                df["_BPM"] = df["BPM"]
+
+            if "_startBeat" in df and "_endBeat" in df and "_BPM" in df:
+                df["_change_in_time"] = (df["_endBeat"] - df["_startBeat"]) * (60 / df["_BPM"])
+                df["_time"] = df["_change_in_time"].cumsum()
+
+        df["source"] = "V3_official"
+        return df
+
+    fallback_bpm = (
+        diff_info.get("_beatsPerMinute")
+        or diff_info.get("beatsPerMinute")
+    )
+
+    return pd.DataFrame([{
+        "_startBeat": 0.0,
+        "_endBeat": 99999.0,
+        "_BPM": fallback_bpm,
+        "_change_in_time": 0.0,
+        "_time": 0.0,
+        "source": "fallback"
+    }])
+
        
 def get_diff_info_dict(info_data, diff):
     """

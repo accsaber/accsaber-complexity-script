@@ -2,6 +2,7 @@
 This file contains helper functions to calculate map statistics that will be called in the MapStatistics class
 """
 import math
+EPSILON = 0.059 # Epsilon threshold in ms for detecting when blocks count towards the same swing
 
 def GetLeftSwings(map_object):
     return len(map_object.dataframe_struct.df_new_left_swing)
@@ -45,7 +46,14 @@ def GetNumDoubles(map_object):
 def GetTrueAccAvgSps(map_object):
     return round(len(map_object.dataframe_struct.df_ignore_doubles) / map_object.dataframe_struct.df_ignore_doubles['_timeChangeSeconds'].sum(), 2)
 
-def HasSliders(map_object):
+def HasSliders(map_object, left=None, right=None):
+    """
+    Checks whether the map contains sliders. Optionally accepts the raw left/right
+    note DataFrames so callers can pass them directly.
+    """
+    left_df = left if left is not None else map_object.dataframe_struct.df_left
+    right_df = right if right is not None else map_object.dataframe_struct.df_right
+
     num_sliders = len(map_object.dataframe_struct.df_left_sliders) + len(map_object.dataframe_struct.df_right_sliders)
     if (num_sliders > 0):
         return 1

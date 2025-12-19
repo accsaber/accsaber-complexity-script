@@ -9,48 +9,42 @@ def AddNextPrevNoteColumns(df, metadata_version):
     Adds '_nextX', '_nextY', '_prevX', and '_prevY' columns to the DataFrame
     """
     df_modified = df.copy()
-    prev_note = None
+    prev_idx = None
     df_modified['_prevX'] = float('nan')
     df_modified['_prevY'] = float('nan')
     df_modified['_nextX'] = float('nan')
     df_modified['_nextY'] = float('nan')
     if (metadata_version == "v2"):
         # v2 metadata
-        for row in df_modified.itertuples(index=True):
-            if (row._type == 0 or row._type == 1):
-                # this is a note
-                if (prev_note == None):
-                    prev_note = row
+        for idx, row in df_modified.iterrows():
+            if (row['_type'] == 0 or row['_type'] == 1):
+                if prev_idx is None:
+                    prev_idx = idx
                 else:
-                    idx = row.Index
-                    prev_idx = prev_note.Index
                     df_modified.loc[idx, '_prevX'] = df_modified.loc[prev_idx, '_xCenter']
                     df_modified.loc[idx, '_prevY'] = df_modified.loc[prev_idx, '_yCenter']
 
                     df_modified.loc[prev_idx, '_nextX'] = df_modified.loc[idx, '_xCenter']
                     df_modified.loc[prev_idx, '_nextY'] = df_modified.loc[idx, '_yCenter']
-                    prev_note = row
+                    prev_idx = idx
     else:
         # v3 metadata
-        for row in df_modified.itertuples(index=True):
-            if (row.c == 0 or row.c == 1):
-                # this is a note
-                if (prev_note == None):
-                    prev_note = row
+        for idx, row in df_modified.iterrows():
+            if (row['c'] == 0 or row['c'] == 1):
+                if prev_idx is None:
+                    prev_idx = idx
                 else:
-                    idx = row.Index
-                    prev_idx = prev_note.Index
                     df_modified.loc[idx, '_prevX'] = df_modified.loc[prev_idx, '_xCenter']
                     df_modified.loc[idx, '_prevY'] = df_modified.loc[prev_idx, '_yCenter']
 
                     df_modified.loc[prev_idx, '_nextX'] = df_modified.loc[idx, '_xCenter']
                     df_modified.loc[prev_idx, '_nextY'] = df_modified.loc[idx, '_yCenter']
-                    prev_note = row
+                    prev_idx = idx
 
     return df_modified
 
 
-def CombineNotesAndBombs(bpm_changes, df, df_bombs):
+def CombineNotesAndBombs(initial_bpm, bpm_changes, df, df_bombs):
     """
     Combines the entries of df and df_bombs into a single DataFrame
     Sorts these results by ascending beat number and then returns this DataFrame
@@ -59,11 +53,23 @@ def CombineNotesAndBombs(bpm_changes, df, df_bombs):
     df_combined['_seconds'] = 0.0
     for i in range(len(df_combined)):
         b = df_combined.loc[i, 'b']
-        region_df = bpm_changes[bpm_changes['_startBeat'] <= b]
+        if bpm_changes.empty or "_startBeat" not in bpm_changes.columns:
+            region_df = bpm_changes  # will be empty, but safe
+        else:
+            region_df = bpm_changes[bpm_changes["_startBeat"] <= b]
 
         if len(region_df) == 0:
             # use the first BPM region
-            region = bpm_changes.head(1).iloc[0]
+            if bpm_changes.empty:
+                region = {
+                    "_startBeat": 0,
+                    "_endBeat": float('inf'),
+                    "_BPM": initial_bpm,    # map will use initial BPM
+                    "_time": 0,
+                    "source": "no_bpm_changes"
+                }
+            else:
+                region = bpm_changes.head(1).iloc[0]
         else:
             # use the most recent region
             region = region_df.tail(1).iloc[0]
@@ -81,14 +87,14 @@ def AffectsSwingPath(prev_note, bomb):
     Checks if a bomb affects the swing path of the prev_note
     Returns 1 if it affects the swing path, 0 otherwise
     """
-    prevX = prev_note._prevX
-    prevY = prev_note._prevY
-    nextX = prev_note._nextX
-    nextY = prev_note._nextY
-    curX = prev_note._xCenter
-    curY = prev_note._yCenter
-    bombX = bomb._xCenter
-    bombY = bomb._yCenter
+    prevX = prev_note['_prevX']
+    prevY = prev_note['_prevY']
+    nextX = prev_note['_nextX']
+    nextY = prev_note['_nextY']
+    curX = prev_note['_xCenter']
+    curY = prev_note['_yCenter']
+    bombX = bomb['_xCenter']
+    bombY = bomb['_yCenter']
     if not math.isnan(prevX):
         if (curX != prevX):
             slope = (curY - prevY) / (curX - prevX)
@@ -125,14 +131,14 @@ def WithDirPrevSwing(prev_note, bomb):
     Checks if a bomb is with the direction of the previous swing
     Returns 1 if it is with the direction of the previous swing, 0 if against
     """
-    nextNoteX = prev_note._nextX
-    nextNoteY = prev_note._nextY
+    nextNoteX = prev_note['_nextX']
+    nextNoteY = prev_note['_nextY']
     if math.isnan(nextNoteX) or math.isnan(nextNoteY):
         return 0
-    prevNoteX = prev_note._xCenter
-    prevNoteY = prev_note._yCenter
-    bombX = bomb._xCenter
-    bombY = bomb._yCenter
+    prevNoteX = prev_note['_xCenter']
+    prevNoteY = prev_note['_yCenter']
+    bombX = bomb['_xCenter']
+    bombY = bomb['_yCenter']
     note_diffX = nextNoteX - prevNoteX
     note_diffY = nextNoteY - prevNoteY
     bomb_diffX = bombX - prevNoteX
@@ -161,7 +167,7 @@ def ValidTimeBeforeBombAfterNote(prev_note, bomb, njs, category):
     Checks if a single (prev_note, bomb) triple satisfies requirements for min time before the bomb after the note
     Returns 1 if it is valid, 0 if not
     """
-    time_diff_ms = (bomb._seconds - prev_note._seconds) / 1000
+    time_diff_ms = (bomb['_seconds'] - prev_note['_seconds']) / 1000
     if ((AffectsSwingPath(prev_note, bomb) == 0) and (WithDirPrevSwing(prev_note, bomb) == 0) and (category != "true")):
         # the bomb does not affect swing path and is against against the direction of the previous swing and category is not true acc
         if (time_diff_ms < (1500/njs)):
@@ -190,7 +196,7 @@ def ValidTimeBeforeNoteAfterBomb(prev_bomb, note):
     Checks if a single (bomb, note) pairs satisfies requirements for min time before the note after the bomb
     Returns 1 if it is valid, 0 if not
     """
-    time_diff_ms = (note._seconds - prev_bomb._seconds) / 1000
+    time_diff_ms = (note['_seconds'] - prev_bomb['_seconds']) / 1000
     if (time_diff_ms < 150):
         return 0
     else:
@@ -209,31 +215,25 @@ def RunAllPreBombChecks(map_object):
     metadata_version = map_object.metadata_version
     if (metadata_version == "v2"):
         df_modified = AddNextPrevNoteColumns(df, metadata_version)
-        for row in df_modified.itertuples(index=True):
-            # v2 metadata
-            if (row._type == 0 or row._type == 1): 
-                # this is a note
+        for _, row in df_modified.iterrows():
+            if (row['_type'] == 0 or row['_type'] == 1): 
                 prev_note = row
-            elif (row._type == 3):
-                # this is a bomb
+            elif (row['_type'] == 3):
                 if prev_note is not None:
                     is_valid = ValidTimeBeforeBombAfterNote(prev_note, row, map_object.njs, map_object.category)
                     if is_valid == 0:
-                        invalid_times.append(row._seconds)
+                        invalid_times.append(row['b'])
     else:
-        df_combined = CombineNotesAndBombs(map_object.bpm_changes, df, map_object.dataframe_struct.df_bombs)
+        df_combined = CombineNotesAndBombs(map_object.initial_bpm, map_object.bpm_changes, df, map_object.dataframe_struct.df_bombs)
         df_modified = AddNextPrevNoteColumns(df_combined, metadata_version)
-        for row in df_modified.itertuples(index=True):
-            # v3 metadata
-            if (row.c == 0 or row.c == 1): 
-                # this is a note
+        for _, row in df_modified.iterrows():
+            if (row['c'] == 0 or row['c'] == 1): 
                 prev_note = row
-            elif (row.c == 3):
-                # this is a bomb
+            elif (row['c'] == 3):
                 if prev_note is not None:
                     is_valid = ValidTimeBeforeBombAfterNote(prev_note, row, map_object.njs, map_object.category)
                     if is_valid == 0:
-                        invalid_times.append(row._seconds)
+                        invalid_times.append(row['b'])
     return invalid_times
 
 def RunAllPostBombChecks(map_object):
@@ -247,29 +247,23 @@ def RunAllPostBombChecks(map_object):
     df = map_object.dataframe_struct.df
     metadata_version = map_object.metadata_version
     if (metadata_version == "v2"):
-        for row in df.itertuples(index=True):
-            # v2 metadata
-            if (row._type == 3): 
-                # this is a bomb
+        for _, row in df.iterrows():
+            if (row['_type'] == 3): 
                 prev_bomb = row
-            elif (row._type == 0 or row._type == 1):
-                # this is a note
+            elif (row['_type'] == 0 or row['_type'] == 1):
                 if prev_bomb is not None:
                     is_valid = ValidTimeBeforeNoteAfterBomb(prev_bomb, row)
                     if is_valid == 0:
-                        invalid_times.append(row._seconds)
+                        invalid_times.append(row['b'])
     else:
-        df_combined = CombineNotesAndBombs(map_object.bpm_changes, df, map_object.dataframe_struct.df_bombs)
-        for row in df_combined.itertuples(index=True):
-            # v3 metadata
-            if (row.c == 3): 
-                # this is a bomb
+        df_combined = CombineNotesAndBombs(map_object.initial_bpm, map_object.bpm_changes, df, map_object.dataframe_struct.df_bombs)
+        for _, row in df_combined.iterrows():
+            if (row['c'] == 3): 
                 prev_bomb = row
-            elif (row.c == 0 or row.c == 1):
-                # this is a note
+            elif (row['c'] == 0 or row['c'] == 1):
                 if prev_bomb is not None:
                     is_valid = ValidTimeBeforeNoteAfterBomb(prev_bomb, row)
                     if is_valid == 0:
-                        invalid_times.append(row._seconds)
+                        invalid_times.append(row['b'])
     return invalid_times
             
