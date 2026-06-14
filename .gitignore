@@ -4,3 +4,6 @@ accsaber-maps
 examples
 libs/__pycache__
 archive
+__pycache__/
+*.pyc
+app_debug.log
