@@ -4,7 +4,8 @@
 # Works on both macOS (produces a .app bundle) and Windows (produces a folder
 # containing the .exe). Build with:  pyinstaller accsaber_checker.spec --noconfirm
 #
-# Assumes this file lives at the repo root, next to the accsaber_complexity_script/ folder.
+# Assumes this file lives at the repo root, alongside main.py, app.py,
+# checker.py, and the libs/ folder.
 
 block_cipher = None
 
@@ -15,8 +16,8 @@ block_cipher = None
 # list them here as (source, destination_folder_inside_bundle) tuples, e.g.:
 #
 #   datas = [
-#       ('accsaber_complexity_script/libs/criteria.json', 'libs'),
-#       ('accsaber_complexity_script/data', 'data'),
+#       ('libs/criteria.json', 'libs'),
+#       ('data', 'data'),
 #   ]
 #
 # Leave it empty if your checker only reads the map folder the user selects
@@ -25,8 +26,8 @@ block_cipher = None
 datas = []
 
 a = Analysis(
-    ['accsaber_complexity_script/main.py'],
-    pathex=['accsaber_complexity_script'],
+    ['main.py'],
+    pathex=['.'],
     binaries=[],
     datas=datas,
     hiddenimports=[],
