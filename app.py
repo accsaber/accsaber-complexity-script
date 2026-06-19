@@ -282,14 +282,6 @@ class RankingCheckerApp:
                 lines.extend(output["logs"])
             else:
                 lines.append("No criteria issues were found.")
-            if output["stdout"].strip():
-                lines.extend(
-                    [
-                        "",
-                        "Script output:",
-                        output["stdout"].rstrip(),
-                    ]
-                )
             self._set_output("\n".join(lines))
             self.status_var.set("Check complete.")
         finally:
