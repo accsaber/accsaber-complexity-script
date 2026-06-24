@@ -31,8 +31,10 @@ def _group_same_hand_pattern_counts(df, beat_col, x_col, y_col):
 
             if has_vertical_gap:
                 counts["windows"] += 1
-            else:
+            elif len(sorted_y) >= 3:
                 counts["towers"] += 1
+            else:
+                counts["overlap_stacks"] += 1
         else:
             counts["overlap_stacks"] += 1
 
