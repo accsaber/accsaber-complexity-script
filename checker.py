@@ -22,6 +22,16 @@ def list_standard_difficulties(mapset_path):
         info_data = json.load(handle)
 
     difficulties = []
+
+    if "difficultyBeatmaps" in info_data:
+        for difficulty in info_data.get("difficultyBeatmaps", []):
+            if difficulty.get("characteristic") != "Standard":
+                continue
+            name = difficulty.get("difficulty")
+            if name and name not in difficulties:
+                difficulties.append(name)
+        return difficulties
+
     for beatmap_set in info_data.get("_difficultyBeatmapSets", []):
         if beatmap_set.get("_beatmapCharacteristicName") != "Standard":
             continue
